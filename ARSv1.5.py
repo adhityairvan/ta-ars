@@ -101,19 +101,25 @@ class ARS():
         manager = BaseManager()
         manager.start()
         self.normalizer = manager.Normalizer(nb_inputs)
-        self.pool = mp.Pool()
+        
     def train(self):
         file = open('log_reward', 'w')
         """ train agent"""
+        envs = [gym.make(self.hp.env_name) for i in range(self.hp.nb_directions)]
         for step in range(self.hp.nb_steps):
+            self.pool = mp.Pool()
             #generate random pertrutbation
             deltas = self.policy.sample_deltas()
             #create variable to save the rewards
             positive_rewards = [0] * self.hp.nb_directions
             negative_rewards = [0] * self.hp.nb_directions
             
-            positive_rewards = self.pool.starmap(explore,[(self.hp.env_name, self.hp, self.normalizer, self.policy, "positive", deltas[i]) for i in range(self.hp.nb_directions)])
-            negative_rewards = self.pool.starmap(explore,[(self.hp.env_name, self.hp, self.normalizer, self.policy, "negative", deltas[i]) for i in range(self.hp.nb_directions)])
+            positive_rewards = self.pool.starmap(explore,[(envs[i], self.hp, self.normalizer, self.policy, "positive", deltas[i]) for i in range(self.hp.nb_directions)])
+            negative_rewards = self.pool.starmap(explore,[(envs[i], self.hp, self.normalizer, self.policy, "negative", deltas[i]) for i in range(self.hp.nb_directions)])
+            
+            self.pool.close()
+            self.pool.join()
+            
             #gathering the rewards
             all_rewards = np.array(positive_rewards + negative_rewards)
             
@@ -136,10 +142,10 @@ class ARS():
 # function to explore the env in one way, this can be called in paralel by specifying lock
 def explore(env_name, hp, normalizer, policy, direction = None, delta = None):
     """explore environment to one specific theta value"""
-    if(isinstance(env_name, str)):
-        env = gym.make(env_name)
-    else:
-        env = env_name
+    # if(isinstance(env_name, str)):
+    #     env = gym.make(env_name)
+    # else:
+    env = env_name
     state = env.reset()
     done = False
     num_plays = 0.
