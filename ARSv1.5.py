@@ -90,7 +90,7 @@ class ARS():
     """ ars class. Main class to ars algorithm"""
     def __init__(self, hp, monitor_dir):
         self.env = gym.make(hp.env_name)        
-        self.env = wrappers.Monitor(self.env, monitor_dir, force = True)
+        self.env = wrappers.Monitor(self.env, monitor_dir, force = True, video_callable=capped_cubic_video_schedule)
         self.hp = hp
         nb_inputs = self.env.observation_space.shape[0]
         nb_outputs = self.env.action_space.shape[0]
@@ -172,6 +172,13 @@ def mkdir(base, name):
     if not os.path.exists(path):
         os.makedirs(path)
     return path
+
+# utility function, overriding video record scheduling
+def capped_cubic_video_schedule(episode_id):
+    if episode_id < 1000:
+        return int(round(episode_id ** (1. / 3))) ** 3 == episode_id
+    else:
+        return episode_id % 1000 == 0
 
 #main code to run all the training
 
