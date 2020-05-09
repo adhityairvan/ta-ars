@@ -175,10 +175,7 @@ def mkdir(base, name):
 
 # utility function, overriding video record scheduling
 def capped_cubic_video_schedule(episode_id):
-    if episode_id < 1000:
-        return int(round(episode_id ** (1. / 3))) ** 3 == episode_id
-    else:
-        return episode_id % 1000 == 0
+    return episode_id % 10 == 0
 
 #main code to run all the training
 
