@@ -182,7 +182,7 @@ def capped_cubic_video_schedule(episode_id):
 def main():
     work_dir = mkdir('exp', 'brs')
     monitor_dir = mkdir(work_dir, 'monitor')
-    hp = Hp(800, 1000, nb_directions = 20, nb_best_directions = 5, env_name = "HopperBulletEnv-v0", shift = 1)
+    hp = Hp(100, 1000, nb_directions = 10, nb_best_directions = 5, env_name = "HopperBulletEnv-v0", shift = 1)
     ars = ARS(hp, monitor_dir)
     start = time.time()
     ars.train()
