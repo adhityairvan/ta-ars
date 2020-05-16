@@ -18,6 +18,7 @@ import gym
 import pybullet_envs
 import os
 import time
+import ray
 
 import multiprocessing as mp
 from multiprocessing.managers import BaseManager
@@ -190,4 +191,5 @@ def main():
     
 lock = mp.Lock()
 if __name__ == "__main__":
+    ray.init()
     main()
