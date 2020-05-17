@@ -19,10 +19,11 @@ import pybullet_envs
 import os
 import time
 import ray
+import gc
 
 import multiprocessing as mp
 from multiprocessing.managers import BaseManager
-
+from Workers import Worker
 class Hp():
     """ Class for saving all hyperparameter values"""
     def __init__(self, nb_steps = 5, episode_length = 1000, learning_rate= 0.02, nb_directions = 16, nb_best_directions = 16, noise = 0.03, seed = 1, env_name = "HalfCheetahBulletEnv-v0", shift = 0):
@@ -105,18 +106,15 @@ class ARS():
     def train(self):
         file = open('log_reward', 'w')
         """ train agent"""
-        envs = [gym.make(self.hp.env_name) for i in range(self.hp.nb_directions)]
+        mainWorker = Worker.remote(self.env, self.hp)
+        worker = [Worker.remote(gym.make(self.hp.env_name), self.hp) for i in range(self.hp.nb_directions)]
         for step in range(self.hp.nb_steps):
             # self.pool = mp.Pool()
             #generate random pertrutbation
             deltas = self.policy.sample_deltas()
             
-            # positive_rewards = self.pool.starmap(explore,[(envs[i], self.hp, self.normalizer, self.policy, "positive", deltas[i]) for i in range(self.hp.nb_directions)])
-            # negative_rewards = self.pool.starmap(explore,[(envs[i], self.hp, self.normalizer, self.policy, "negative", deltas[i]) for i in range(self.hp.nb_directions)])
-            positive_rewards_object = [explore.remote(envs[i], self.hp, self.normalizer, self.policy, "positive", deltas[i]) for i in range(self.hp.nb_directions)]
-            positive_rewards = ray.get(positive_rewards_object)
-            negative_rewards_object = [explore.remote(envs[i], self.hp, self.normalizer, self.policy, "negative", deltas[i]) for i in range(self.hp.nb_directions)]
-            negative_rewards = ray.get(negative_rewards_object)
+            positive_rewards = ray.get([worker[i].explore.remote(self.normalizer, self.policy, 'positive', deltas[i]) for i in range(self.hp.nb_directions)])
+            negative_rewards = ray.get([worker[i].explore.remote(self.normalizer, self.policy, 'negative', deltas[i]) for i in range(self.hp.nb_directions)])
 
             
             #gathering the rewards
@@ -133,33 +131,12 @@ class ARS():
             #update the policy with new weight
             self.policy.update(rollouts, sigma_r)
             #print result 
-            reward_evaluation = ray.get(explore.remote(self.env, self.hp, self.normalizer, self.policy))
+            reward_evaluation = ray.get(mainWorker.explore.remote(self.normalizer, self.policy))
             print("Step ", step, "=> Reward: ", reward_evaluation)
             file.write(str(reward_evaluation)+'\n')
+            del reward_evaluation
+            gc.collect()
         return self.policy.tetha
-
-@ray.remote
-# function to explore the env in one way, this can be called in paralel by specifying lock
-def explore(env_name, hp, normalizer, policy, direction = None, delta = None):
-    """explore environment to one specific theta value"""
-    # if(isinstance(env_name, str)):
-    #     env = gym.make(env_name)
-    # else:
-    env = env_name
-    state = env.reset()
-    done = False
-    num_plays = 0.
-    sum_rewards = 0
-    while not done and num_plays < hp.episode_length:
-        # lock the shared normalizer object before doing calculation
-        state = ray.get(normalizer.observe.remote(state))
-        # state = normalizer.normalize(state)
-        action = policy.evaluate(state, delta, direction)
-        state, reward, done, _ = env.step(action)
-        
-        sum_rewards += (reward - hp.shift)
-        num_plays += 1
-    return sum_rewards
         
 # utillity function to create base dir
 def mkdir(base, name):
@@ -176,14 +153,15 @@ def capped_cubic_video_schedule(episode_id):
 #main code to run all the training
 
 def main():
+    ray.init(address='auto', redis_password='5241590000000000')
     work_dir = mkdir('exp', 'brs')
     monitor_dir = mkdir(work_dir, 'monitor')
-    hp = Hp(2, 1000, nb_directions = 5, nb_best_directions = 5, env_name = "HopperBulletEnv-v0", shift = 1)
+    hp = Hp(2000, 1000, nb_directions = 20, nb_best_directions = 5, env_name = "HopperBulletEnv-v0", shift = 1)
     ars = ARS(hp, monitor_dir)
     start = time.time()
     ars.train()
+    ray.shutdown()
     print(time.time() - start)
 
 if __name__ == "__main__":
-    ray.init()
     main()
