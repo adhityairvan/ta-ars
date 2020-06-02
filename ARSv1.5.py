@@ -18,14 +18,13 @@ import gym
 import pybullet_envs
 import os
 import time
-import ray
 
 import multiprocessing as mp
 from multiprocessing.managers import BaseManager
 
 class Hp():
     """ Class for saving all hyperparameter values"""
-    def __init__(self, nb_steps = 5, episode_length = 1000, learning_rate= 0.02, nb_directions = 16, nb_best_directions = 16, noise = 0.03, seed = 1, env_name = "HalfCheetahBulletEnv-v0", shift = 0):
+    def __init__(self, nb_steps = 5, episode_length = 1000, learning_rate= 0.02, nb_directions = 16, nb_best_directions = 16, noise = 0.03, seed = 1, env_name = "HalfCheetahBulletEnv-v0"):
         self.nb_steps = nb_steps
         self.episode_length = episode_length
         self.learning_rate = learning_rate
@@ -35,7 +34,6 @@ class Hp():
         self.noise = noise
         self.seed = seed
         self.env_name = env_name
-        self.shift = shift
 
 class Policy():
     """ Policy class handles all policy related task liked giving output to some input, returning random samples and updating policy value"""
@@ -91,7 +89,7 @@ class ARS():
     """ ars class. Main class to ars algorithm"""
     def __init__(self, hp, monitor_dir):
         self.env = gym.make(hp.env_name)        
-        self.env = wrappers.Monitor(self.env, monitor_dir, force = True, video_callable=capped_cubic_video_schedule)
+        self.env = wrappers.Monitor(self.env, monitor_dir, force = True)
         self.hp = hp
         nb_inputs = self.env.observation_space.shape[0]
         nb_outputs = self.env.action_space.shape[0]
@@ -102,25 +100,19 @@ class ARS():
         manager = BaseManager()
         manager.start()
         self.normalizer = manager.Normalizer(nb_inputs)
-        
+        self.pool = mp.Pool()
     def train(self):
         file = open('log_reward', 'w')
         """ train agent"""
-        envs = [gym.make(self.hp.env_name) for i in range(self.hp.nb_directions)]
         for step in range(self.hp.nb_steps):
-            self.pool = mp.Pool()
             #generate random pertrutbation
             deltas = self.policy.sample_deltas()
             #create variable to save the rewards
             positive_rewards = [0] * self.hp.nb_directions
             negative_rewards = [0] * self.hp.nb_directions
             
-            positive_rewards = self.pool.starmap(explore,[(envs[i], self.hp, self.normalizer, self.policy, "positive", deltas[i]) for i in range(self.hp.nb_directions)])
-            negative_rewards = self.pool.starmap(explore,[(envs[i], self.hp, self.normalizer, self.policy, "negative", deltas[i]) for i in range(self.hp.nb_directions)])
-            
-            self.pool.close()
-            self.pool.join()
-            
+            positive_rewards = self.pool.starmap(explore,[(self.hp.env_name, self.hp, self.normalizer, self.policy, "positive", deltas[i]) for i in range(self.hp.nb_directions)])
+            negative_rewards = self.pool.starmap(explore,[(self.hp.env_name, self.hp, self.normalizer, self.policy, "negative", deltas[i]) for i in range(self.hp.nb_directions)])
             #gathering the rewards
             all_rewards = np.array(positive_rewards + negative_rewards)
             
@@ -131,6 +123,7 @@ class ARS():
             scores = { k:max(r_pos, r_neg) for k,(r_pos,r_neg) in enumerate(zip(positive_rewards, negative_rewards))} 
             order = sorted(scores.keys(), key = lambda x: scores[x], reverse = True)[:self.hp.nb_best_directions]
             rollouts = [(positive_rewards[k], negative_rewards[k], deltas[k]) for k in order]
+            print(len(rollouts))
             
             #update the policy with new weight
             self.policy.update(rollouts, sigma_r)
@@ -143,10 +136,10 @@ class ARS():
 # function to explore the env in one way, this can be called in paralel by specifying lock
 def explore(env_name, hp, normalizer, policy, direction = None, delta = None):
     """explore environment to one specific theta value"""
-    # if(isinstance(env_name, str)):
-    #     env = gym.make(env_name)
-    # else:
-    env = env_name
+    if(isinstance(env_name, str)):
+        env = gym.make(env_name)
+    else:
+        env = env_name
     state = env.reset()
     done = False
     num_plays = 0.
@@ -159,8 +152,8 @@ def explore(env_name, hp, normalizer, policy, direction = None, delta = None):
         lock.release()
         action = policy.evaluate(state, delta, direction)
         state, reward, done, _ = env.step(action)
-        
-        sum_rewards += (reward - hp.shift)
+        #reward = max(min(reward, 1), -1)
+        sum_rewards += reward
         num_plays += 1
     if isinstance(env_name,str):
         env.close()
@@ -174,16 +167,12 @@ def mkdir(base, name):
         os.makedirs(path)
     return path
 
-# utility function, overriding video record scheduling
-def capped_cubic_video_schedule(episode_id):
-    return episode_id % 10 == 0
-
 #main code to run all the training
 
 def main():
     work_dir = mkdir('exp', 'brs')
     monitor_dir = mkdir(work_dir, 'monitor')
-    hp = Hp(100, 1000, nb_directions = 10, nb_best_directions = 5, env_name = "HopperBulletEnv-v0", shift = 1)
+    hp = Hp(100, 1000, nb_directions = 10, nb_best_directions = 5, env_name = "HalfCheetahBulletEnv-v0")
     ars = ARS(hp, monitor_dir)
     start = time.time()
     ars.train()
@@ -191,5 +180,4 @@ def main():
     
 lock = mp.Lock()
 if __name__ == "__main__":
-    ray.init()
     main()

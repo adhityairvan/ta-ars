@@ -15,9 +15,7 @@ class Worker:
         num_plays = 0.
         sum_rewards = 0
         while not done and num_plays < self.hp.episode_length:
-            # lock the shared normalizer object before doing calculation
             state = ray.get(normalizer.observe.remote(state))
-            # state = normalizer.normalize(state)
             action = policy.evaluate(state, delta, direction)
             state, reward, done, _ = self.env.step(action)
             

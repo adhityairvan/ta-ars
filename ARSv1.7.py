@@ -15,7 +15,7 @@ Created on Fri Nov  8 17:38:56 2019
 import numpy as np
 from gym import wrappers
 import gym
-import pybullet_envs
+import pybullet_env
 import os
 import time
 import ray
@@ -109,7 +109,6 @@ class ARS():
         mainWorker = Worker.remote(self.env, self.hp)
         worker = [Worker.remote(gym.make(self.hp.env_name), self.hp) for i in range(self.hp.nb_directions)]
         for step in range(self.hp.nb_steps):
-            # self.pool = mp.Pool()
             #generate random pertrutbation
             deltas = self.policy.sample_deltas()
             
@@ -134,8 +133,6 @@ class ARS():
             reward_evaluation = ray.get(mainWorker.explore.remote(self.normalizer, self.policy))
             print("Step ", step, "=> Reward: ", reward_evaluation)
             file.write(str(reward_evaluation)+'\n')
-            del reward_evaluation
-            gc.collect()
         return self.policy.tetha
         
 # utillity function to create base dir
@@ -153,10 +150,10 @@ def capped_cubic_video_schedule(episode_id):
 #main code to run all the training
 
 def main():
-    ray.init(address='auto', redis_password='5241590000000000')
+    ray.init()
     work_dir = mkdir('exp', 'brs')
     monitor_dir = mkdir(work_dir, 'monitor')
-    hp = Hp(2000, 1000, nb_directions = 20, nb_best_directions = 5, env_name = "HopperBulletEnv-v0", shift = 1)
+    hp = Hp(2000, 1000, nb_directions = 16, nb_best_directions = 8, env_name = "HalfCheetahBulletEnv-v0", shift = 0)
     ars = ARS(hp, monitor_dir)
     start = time.time()
     ars.train()
