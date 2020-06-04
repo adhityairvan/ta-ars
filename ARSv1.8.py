@@ -13,6 +13,7 @@ import pybullet_env
 import os
 import time
 import ray
+from ray.util import ActorPool
 import gc
 
 from Workers import Worker
@@ -99,16 +100,20 @@ class ARS():
         file = open('log_reward', 'w')
         """ train agent"""
         mainWorker = Worker.remote(self.env, self.hp)
-        worker = [Worker.remote(gym.make(self.hp.env_name), self.hp) for i in range(self.hp.nb_directions)]
+        worker = ActorPool([Worker.remote(gym.make(self.hp.env_name), self.hp) for i in range(8)])
+        print(worker)
         for step in range(self.hp.nb_steps):
             #generate random pertrutbation
             deltas = self.policy.sample_deltas()
             
-            positive_rewards = ray.get([worker[i].explore.remote(self.normalizer, self.policy, 'positive', deltas[i]) for i in range(self.hp.nb_directions)])
-            negative_rewards = ray.get([worker[i].explore.remote(self.normalizer, self.policy, 'negative', deltas[i]) for i in range(self.hp.nb_directions)])
+            positive_rewards = worker.map(lambda a, v: a.explore.remote(*v), [(self.normalizer, self.policy, 'positive', deltas[i]) for i in range(self.hp.nb_directions)])
+            positive_rewards = [i for i in positive_rewards]
+            
+            negative_rewards = worker.map(lambda a, v: a.explore.remote(*v), [(self.normalizer, self.policy, 'negative', deltas[i]) for i in range(self.hp.nb_directions)])
+            negative_rewards = [i for i in negative_rewards]
 
             
-            #gathering the rewards
+            # gathering the rewards
             all_rewards = np.array(positive_rewards + negative_rewards)
             
             #get the standard deviation of all rewards
@@ -145,7 +150,7 @@ def main():
     ray.init()
     work_dir = mkdir('exp', 'brs')
     monitor_dir = mkdir(work_dir, 'monitor')
-    hp = Hp(2000, 1000, nb_directions = 10, nb_best_directions = 5, env_name = "HalfCheetahBulletEnv-v0", shift = 0)
+    hp = Hp(2000, 1000, nb_directions = 10, nb_best_directions = 5, env_name = "HalfCheetahBulletEnv-v0", shift = 1)
     ars = ARS(hp, monitor_dir)
     start = time.time()
     ars.train()

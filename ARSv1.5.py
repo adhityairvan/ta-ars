@@ -123,7 +123,6 @@ class ARS():
             scores = { k:max(r_pos, r_neg) for k,(r_pos,r_neg) in enumerate(zip(positive_rewards, negative_rewards))} 
             order = sorted(scores.keys(), key = lambda x: scores[x], reverse = True)[:self.hp.nb_best_directions]
             rollouts = [(positive_rewards[k], negative_rewards[k], deltas[k]) for k in order]
-            print(len(rollouts))
             
             #update the policy with new weight
             self.policy.update(rollouts, sigma_r)

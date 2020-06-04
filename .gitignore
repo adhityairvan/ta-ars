@@ -2,3 +2,4 @@ exp/
 __pycache__/
 *.pyc
 pybullet_env/
+log_reward*
